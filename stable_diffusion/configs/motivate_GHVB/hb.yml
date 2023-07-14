@@ -1,0 +1,14 @@
+model_id: "runwayml/stable-diffusion-v1-5"
+scheduler:
+  base: "EulerDiscreteScheduler"
+  order: [4.0, 3.8, 3.6, 3.4, 3.2]
+  method: "hb"
+
+guidance_scale: 15
+save_dir: "../SD_output/motivate_GHVB/hb"
+mode: ["proposed"]
+steps: [15]
+image_per_case: 1
+init_seed: 46
+prompts:
+ - "A beautiful illustration of people releasing lanterns near a river"

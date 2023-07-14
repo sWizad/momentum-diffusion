@@ -1,0 +1,29 @@
+model_id: "andite/anything-v4.0"
+scheduler:
+  base: "MomentumDPMSolverMultistepScheduler"
+  momentum: [1.0, 0.9, 0.8]
+  method: "dpm"
+
+guidance_scale: 15
+save_dir:  "../SD_output/SOTA_artifacts/dpm"
+mode: ["proposed"]
+steps: [10, 15, 20, 25, 30, 60]
+image_per_case: 10
+init_seed: 42
+prompts:
+ - "A beautiful illustration of an epic battle between two Jedi warriors, but replace their Lightsabers with long breadsticks"
+ - "A beautiful illustration of a schoolgirl riding her bicycle to school in a small village"
+ - "A beautiful illustration of four adults looking at a large portrait of an elegant lady inside a mansion"
+ - "A beautiful illustration of a Buddhist monk walking towards a Japanese shrine at the seaside"
+ - "A beautiful illustration of a family gathering in a Chinese restaurant"
+ - "A beautiful illustration of a cozy cafe in a futuristic city"
+ - "A photo of a flying car landing to airport runway in the evening"
+ - "A drawing of a girl standing under a sakura tree"
+ - "A beautiful illustration of a train with the Milky Way in the background"
+ - "A painting of a warrior riding a flying unicorn in front of Mt. Fuji"
+ - "A drawing of Himeji castle on top of an upside down pyramid"
+ - "An illustration of a businessman riding a trex in Times Square"
+ - "A painting of an old European castle in a deep forest with a Blood Moon in the background"
+ - "A beautiful illustration of a couple looking at fireworks in a summer festival in Japan"
+ - "A beautiful illustration of people releasing lanterns near a river"
+ - "A photo of a person standing at the edge of the cliff and looking down at the abyss below"
