@@ -1,5 +1,11 @@
 # Diffusion Sampling with Momentum
 The implementation for Diffusion Sampling with Momentum for Mitigating Divergence Artifacts (2023)
+[![][colab]][SD-colab] [![][huggingface]][huggingface-link]
+
+[colab]: <https://colab.research.google.com/assets/colab-badge.svg>
+[SD-colab]: <https://colab.research.google.com/drive/1hGIltfD_MY8UUkMeINel3JeoHMyQLivs>
+[huggingface]: <https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue>
+[huggingface-link]: <https://docs.google.com/document/d/1-hGR6VEhHkIbhsodT_KGL3ivWt4NFj3qRbOZjU-hB4E/edit?usp=sharing>
 
 ## Requirements
 

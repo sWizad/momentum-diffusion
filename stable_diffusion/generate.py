@@ -51,7 +51,6 @@ def main(args, prompt, prompt_id, device, mode):
                     "num_inference_steps": step,
                     "guidance_scale": args.guidance_scale,
                     "generator": generator,
-                    "method": method,
                 })
                 elapsed_time = time.time() - start_time
 

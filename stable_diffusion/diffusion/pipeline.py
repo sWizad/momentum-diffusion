@@ -1,4 +1,3 @@
-
 import torch
 import math
 import numpy as np
@@ -16,7 +15,7 @@ from transformers import CLIPTextModel
 from diffusers.pipelines.controlnet.pipeline_controlnet import StableDiffusionControlNetPipeline
 from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
 import PIL
-#import PIL.Image
+
 from diffusers.utils import (
     is_compiled_module,
 )
@@ -30,7 +29,7 @@ from diffusers.utils import (
 )
 
 # for SDXL
-from diffusers.pipelines.stable_diffusion_xl import StableDiffusionXLPipelineOutput#, #rescale_noise_cfg
+from diffusers.pipelines.stable_diffusion_xl import StableDiffusionXLPipelineOutput
 from diffusers.models.attention_processor import (
     AttnProcessor2_0,
     LoRAAttnProcessor2_0,
@@ -59,6 +58,9 @@ available_subsolvers = {
     "GHVB": GHVBScheduler,
     "PLMS_HB": PLMSWithHBScheduler,
     "PLMS_NT": PLMSWithNTScheduler,
+    "ghvb": GHVBScheduler,
+    "hb": PLMSWithHBScheduler,
+    "nt": PLMSWithNTScheduler,
 }
 available_solvers = {
     "DPM-Solver++": MomentumDPMSolverMultistepScheduler,
@@ -92,8 +94,8 @@ class CustomPipeline(StableDiffusionPipeline):
         self.is_cross = True
         self.th = th
 
-    def get_noise(self, latents, prompt_embeds, guidance_scale, t, do_classifier_free_guidance):
-        
+    def get_noise(self, latents, prompt_embeds, guidance_scale, t, ):
+        do_classifier_free_guidance = guidance_scale > 1.0
         if hasattr(self, 'is_cross') and t.item()>self.th:
             # expand the latents if we are doing classifier free guidance
             latent_model_input = latents
@@ -126,7 +128,7 @@ class CustomPipeline(StableDiffusionPipeline):
     ):
         if not hasattr(self, 'method') or self.method in ["DPM-Solver++", "UniPC"]:
             latents = self.scheduler.step(noise_pred_uncond + grads_a, t, latents, **extra_step_kwargs).prev_sample
-        elif self.method in ['PLMS_HB', 'PLMS_NT', 'GHVB']:
+        elif self.method in ['PLMS_HB', 'PLMS_NT', 'GHVB', 'hb', 'nt', 'ghvb']:
             latents = self.scheduler_uncond.step(noise_pred_uncond + grads_a, t, latents, output_mode="scale")
         else:
             raise NotImplementedError
@@ -215,7 +217,7 @@ class CustomPipeline(StableDiffusionPipeline):
         progress_loop = enumerate(progress_bar(timesteps, parent=self.mb)) if is_fastprogress_installed and hasattr(self,'mb') else enumerate(timesteps)
         for i, t in progress_loop:
             noise_pred_uncond, grads_a = self.get_noise(
-                latents, prompt_embeds, guidance_scale, t, do_classifier_free_guidance
+                latents, prompt_embeds, guidance_scale, t
             )
             latents = self.denoising_step(
                 latents,
@@ -259,10 +261,8 @@ class CustomPipeline(StableDiffusionPipeline):
 
         with torch.no_grad():
             latents = torch.clone(ori_latents)
-            #image = self.decode_latents(latents)
-            #image = self.numpy_to_pil(image)[0]
             image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
-            image = self.image_processor.postprocess(image, output_type="pil", do_denormalize=[True] * image.shape[0])
+            image = self.image_processor.postprocess(image, output_type="pil", do_denormalize=[True] * image.shape[0])[0]
 
         return image, ori_latents
 
@@ -296,12 +296,12 @@ class CustomControlNetPipeline(StableDiffusionControlNetPipeline):
             self.scheduler_uncond.clear_temp()
             self.scheduler_text.clear_temp()
 
-    def get_noise(self, latents, prompt_embeds, guidance_scale, t, do_classifier_free_guidance,
+    def get_noise(self, latents, prompt_embeds, guidance_scale, t,
                 cross_attention_kwargs=None,
                 down_block_additional_residuals=None,
                 mid_block_additional_residual=None,
         ):
-        
+        do_classifier_free_guidance = guidance_scale > 1.0
         if hasattr(self, 'is_cross') and t.item()>self.th:
             # expand the latents if we are doing classifier free guidance
             latent_model_input = latents
@@ -548,7 +548,6 @@ class CustomControlNetPipeline(StableDiffusionControlNetPipeline):
                 prompt_embeds, 
                 guidance_scale, 
                 t, 
-                do_classifier_free_guidance,
                 cross_attention_kwargs=cross_attention_kwargs,
                 down_block_additional_residuals=down_block_res_samples,
                 mid_block_additional_residual=mid_block_res_sample,
@@ -1425,11 +1424,11 @@ class CustomSDXLPipeline(StableDiffusionXLPipeline):
                   prompt_embeds, 
                   guidance_scale, 
                   t, 
-                  do_classifier_free_guidance, # why we need?
                   guidance_rescale=0,
                   cross_attention_kwargs = None,
-                  added_cond_kwargs = None):
-        
+                  added_cond_kwargs = None
+        ):
+        do_classifier_free_guidance = guidance_scale > 1.0
         if hasattr(self, 'is_cross') and t.item()>self.th:
             # Not make sense to implement cross model now
             raise NotImplementedError
@@ -1615,7 +1614,6 @@ class CustomSDXLPipeline(StableDiffusionXLPipeline):
                     prompt_embeds, 
                     guidance_scale, 
                     t, 
-                    do_classifier_free_guidance, # why we need?
                     cross_attention_kwargs = cross_attention_kwargs,
                     added_cond_kwargs = added_cond_kwargs)
             

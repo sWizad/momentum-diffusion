@@ -3,7 +3,7 @@ import torch
 from diffusion.pipeline import CustomPipeline
 
 
-pipe = CustomPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16).to("cuda")
+pipe = CustomPipeline.from_pretrained("runwayml/stable-diffusion-v1-5").to("cuda")
 pipe.init_scheduler(method='PLMS_HB', order=1.5) #PLMS_HB, PLMS_NT, GHVB, DPM-Solver++, UniPC
 
 PROMPT = 'astronaut on bicycle'
