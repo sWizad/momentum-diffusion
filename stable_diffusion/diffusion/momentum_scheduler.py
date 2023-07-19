@@ -69,15 +69,7 @@ class PLMSWithHBScheduler():
         output_mode: str = "scale",
     ):
         if self.vel is None: self.vel = grads
-        if hasattr(self.scheduler, 'sigmas'):
-            step_index = (self.scheduler.timesteps == timestep).nonzero().item()
-            sigma = self.scheduler.sigmas[step_index]
-            sigma_next = self.scheduler.sigmas[step_index + 1]
-            del_g = sigma_next - sigma
-            update_val = self._step_with_momentum(grads)
-            return latents + del_g * update_val
-        
-        elif isinstance(self.scheduler, (DPMSolverMultistepScheduler, PNDMScheduler, DDIMScheduler)):
+        if isinstance(self.scheduler, (DPMSolverMultistepScheduler, PNDMScheduler, DDIMScheduler)):
             if isinstance(self.scheduler, (PNDMScheduler, DDIMScheduler)):
                 prev_timestep = timestep - self.scheduler.config.num_train_timesteps // self.scheduler.num_inference_steps
                 alpha_prod_t = self.scheduler.alphas_cumprod[timestep]
@@ -89,34 +81,39 @@ class PLMSWithHBScheduler():
 
                 alpha_prod_t = self.scheduler.alphas_cumprod[current_timestep]
                 alpha_bar_prev = self.scheduler.alphas_cumprod[prev_timestep]
-
             s0 = torch.sqrt(alpha_prod_t)
             s_1 = torch.sqrt(alpha_bar_prev)
             g0 = torch.sqrt(1-alpha_prod_t)/s0
             g_1 = torch.sqrt(1-alpha_bar_prev)/s_1
             del_g = g_1 - g0
 
-            if self.scheduler.config.prediction_type == "v_prediction":
-                beta_prod_t = 1 - alpha_prod_t
-                grads = (alpha_prod_t**0.5) * grads + (beta_prod_t**0.5) * latents
-            elif self.scheduler.config.prediction_type == "sample":
-                beta_prod_t = 1 - alpha_prod_t
-                grads = (latents - alpha_prod_t ** (0.5) * grads) / beta_prod_t ** (0.5)
-            elif self.scheduler.config.prediction_type != "epsilon":
-                raise ValueError( f"prediction_type given as {self.scheduler.config.prediction_type} must be one of `epsilon` or `v_prediction`")
-            
-            update_val = self._step_with_momentum(grads)
-            if output_mode in ["scale"]:
-                return (latents/s0  + del_g * update_val) * s_1
-            elif output_mode in ["back"]:
-                return latents + del_g * update_val * s_1
-            elif output_mode in ["front"]:
-                return latents + del_g * update_val * s0
-            else:
-                return latents + del_g * update_val
-            
+        elif hasattr(self.scheduler, 'sigmas'):
+            step_index = (self.scheduler.timesteps == timestep).nonzero().item()
+            sigma = self.scheduler.sigmas[step_index]
+            sigma_next = self.scheduler.sigmas[step_index + 1]
+            del_g = sigma_next - sigma
+            output_mode = ""
         else:
             raise NotImplementedError
+        
+        if self.scheduler.config.prediction_type == "v_prediction":
+            beta_prod_t = 1 - alpha_prod_t
+            grads = (alpha_prod_t**0.5) * grads + (beta_prod_t**0.5) * latents
+        elif self.scheduler.config.prediction_type == "sample":
+            beta_prod_t = 1 - alpha_prod_t
+            grads = (latents - alpha_prod_t ** (0.5) * grads) / beta_prod_t ** (0.5)
+        elif self.scheduler.config.prediction_type != "epsilon":
+            raise ValueError( f"prediction_type given as {self.scheduler.config.prediction_type} must be one of `epsilon` or `v_prediction`")
+        
+        update_val = self._step_with_momentum(grads)
+        if output_mode in ["scale"]:
+            return (latents/s0  + del_g * update_val) * s_1
+        elif output_mode in ["back"]:
+            return latents + del_g * update_val * s_1
+        elif output_mode in ["front"]:
+            return latents + del_g * update_val * s0
+        else:
+            return latents + del_g * update_val
 
 class GHVBScheduler(PLMSWithHBScheduler):
     """

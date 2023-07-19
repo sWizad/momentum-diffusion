@@ -67,6 +67,19 @@ available_solvers = {
     "UniPC": MomentumUniPCMultistepScheduler,
 }
 
+def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
+    """
+    Rescale `noise_cfg` according to `guidance_rescale`. Based on findings of [Common Diffusion Noise Schedules and
+    Sample Steps are Flawed](https://arxiv.org/pdf/2305.08891.pdf). See Section 3.4
+    """
+    std_text = noise_pred_text.std(dim=list(range(1, noise_pred_text.ndim)), keepdim=True)
+    std_cfg = noise_cfg.std(dim=list(range(1, noise_cfg.ndim)), keepdim=True)
+    # rescale the results from guidance (fixes overexposure)
+    noise_pred_rescaled = noise_cfg * (std_text / std_cfg)
+    # mix with the original results from guidance by factor guidance_rescale to avoid "plain looking" images
+    noise_cfg = guidance_rescale * noise_pred_rescaled + (1 - guidance_rescale) * noise_cfg
+    return noise_cfg
+
 class CustomPipeline(StableDiffusionPipeline):
 
     def init_scheduler(self, method, order):
@@ -94,15 +107,18 @@ class CustomPipeline(StableDiffusionPipeline):
         self.is_cross = True
         self.th = th
 
-    def get_noise(self, latents, prompt_embeds, guidance_scale, t, ):
+
+    def get_noise(self, latents, prompt_embeds, guidance_scale, t, 
+                guidance_rescale = 0.0,
+                cross_attention_kwargs=None,):
         do_classifier_free_guidance = guidance_scale > 1.0
         if hasattr(self, 'is_cross') and t.item()>self.th:
             # expand the latents if we are doing classifier free guidance
             latent_model_input = latents
             latent_model_input = self.scheduler.scale_model_input(latents, t)
 
-            noise_pred_uncond = self.old_unet(latent_model_input, t, encoder_hidden_states=prompt_embeds[0:1])["sample"]
-            noise_pred_text = self.unet(latent_model_input, t, encoder_hidden_states=prompt_embeds[1:2])["sample"]
+            noise_pred_uncond = self.old_unet(latent_model_input, t, encoder_hidden_states=prompt_embeds[0:1], cross_attention_kwargs=cross_attention_kwargs)["sample"]
+            noise_pred_text = self.unet(latent_model_input, t, encoder_hidden_states=prompt_embeds[1:2], cross_attention_kwargs=cross_attention_kwargs)["sample"]
             grads_a = guidance_scale * (noise_pred_text - noise_pred_uncond)
         else:
             # expand the latents if we are doing classifier free guidance
@@ -110,11 +126,16 @@ class CustomPipeline(StableDiffusionPipeline):
             latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
             # predict the noise residual
-            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=prompt_embeds).sample
+            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=prompt_embeds, cross_attention_kwargs=cross_attention_kwargs).sample
 
             if do_classifier_free_guidance:
                 noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
                 grads_a = guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+        if guidance_rescale > 0.0:
+            # Based on 3.4. in https://arxiv.org/pdf/2305.08891.pdf
+            noise_pred = rescale_noise_cfg(noise_pred_uncond + grads_a, noise_pred_text, guidance_rescale=guidance_rescale)
+            grads_a = noise_pred - noise_pred_uncond 
 
         return noise_pred_uncond, grads_a
 
@@ -155,6 +176,7 @@ class CustomPipeline(StableDiffusionPipeline):
         callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
         callback_steps: int = 1,
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
+        guidance_rescale: float = 0.0,
     ):
         # 0. Default height and width to unet
         height = height or self.unet.config.sample_size * self.vae_scale_factor
@@ -212,12 +234,12 @@ class CustomPipeline(StableDiffusionPipeline):
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
         # 7. Denoising loop
-        #num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
-        #with self.progress_bar(total=num_inference_steps) as progress_bar:
         progress_loop = enumerate(progress_bar(timesteps, parent=self.mb)) if is_fastprogress_installed and hasattr(self,'mb') else enumerate(timesteps)
         for i, t in progress_loop:
             noise_pred_uncond, grads_a = self.get_noise(
-                latents, prompt_embeds, guidance_scale, t
+                latents, prompt_embeds, guidance_scale, t,
+                guidance_rescale=guidance_rescale,
+                cross_attention_kwargs=cross_attention_kwargs
             )
             latents = self.denoising_step(
                 latents,
@@ -297,6 +319,7 @@ class CustomControlNetPipeline(StableDiffusionControlNetPipeline):
             self.scheduler_text.clear_temp()
 
     def get_noise(self, latents, prompt_embeds, guidance_scale, t,
+                guidance_rescale = 0.0,
                 cross_attention_kwargs=None,
                 down_block_additional_residuals=None,
                 mid_block_additional_residual=None,
@@ -332,11 +355,15 @@ class CustomControlNetPipeline(StableDiffusionControlNetPipeline):
                             cross_attention_kwargs=cross_attention_kwargs,
                             down_block_additional_residuals=down_block_additional_residuals,
                             mid_block_additional_residual=mid_block_additional_residual,).sample
-            #pdb.set_trace()
 
             if do_classifier_free_guidance:
                 noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
                 grads_a = guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+        if guidance_rescale > 0.0:
+            # Based on 3.4. in https://arxiv.org/pdf/2305.08891.pdf
+            noise_pred = rescale_noise_cfg(noise_pred_uncond + grads_a, noise_pred_text, guidance_rescale=guidance_rescale)
+            grads_a = noise_pred - noise_pred_uncond 
 
         return noise_pred_uncond, grads_a
     
@@ -387,6 +414,7 @@ class CustomControlNetPipeline(StableDiffusionControlNetPipeline):
         callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
         callback_steps: int = 1,
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
+        guidance_rescale: float = 0.0,
         controlnet_conditioning_scale: Union[float, List[float]] = 1.0,
         guess_mode: bool = False,
         control_guidance_start: Union[float, List[float]] = 0.0,
@@ -548,6 +576,7 @@ class CustomControlNetPipeline(StableDiffusionControlNetPipeline):
                 prompt_embeds, 
                 guidance_scale, 
                 t, 
+                guidance_rescale=guidance_rescale,
                 cross_attention_kwargs=cross_attention_kwargs,
                 down_block_additional_residuals=down_block_res_samples,
                 mid_block_additional_residual=mid_block_res_sample,
@@ -1452,9 +1481,10 @@ class CustomSDXLPipeline(StableDiffusionXLPipeline):
                 noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
                 grads_a = guidance_scale * (noise_pred_text - noise_pred_uncond)
 
-            #if do_classifier_free_guidance and guidance_rescale > 0.0:
-                # Based on 3.4. in https://arxiv.org/pdf/2305.08891.pdf
-            #    noise_pred = rescale_noise_cfg(noise_pred, noise_pred_text, guidance_rescale=guidance_rescale)
+        if guidance_rescale > 0.0:
+            # Based on 3.4. in https://arxiv.org/pdf/2305.08891.pdf
+            noise_pred = rescale_noise_cfg(noise_pred_uncond + grads_a, noise_pred_text, guidance_rescale=guidance_rescale)
+            grads_a = noise_pred - noise_pred_uncond 
 
         return noise_pred_uncond, grads_a
     
@@ -1614,6 +1644,7 @@ class CustomSDXLPipeline(StableDiffusionXLPipeline):
                     prompt_embeds, 
                     guidance_scale, 
                     t, 
+                    guidance_rescale=guidance_rescale,
                     cross_attention_kwargs = cross_attention_kwargs,
                     added_cond_kwargs = added_cond_kwargs)
             
