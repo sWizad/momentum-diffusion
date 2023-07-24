@@ -1,11 +1,11 @@
 # Diffusion Sampling with Momentum
-[![][colab]][colab-link] [![][huggingface]][huggingface-link]
+[![][Arxiv]][Arxiv-link] [![][colab]][colab-link] [![][huggingface]][huggingface-link]
 
 The implementation for Diffusion Sampling with Momentum for Mitigating Divergence Artifacts (2023)
 
 [Page]: <https://img.shields.io/badge/Project-Page-Green>
 [Arxiv]: <https://img.shields.io/badge/Paper-Arxiv-red>
-[Arxiv-link]: <https://img.shields.io/badge/Paper-Arxiv-red>
+[Arxiv-link]: <https://arxiv.org/abs/2307.11118?fbclid=IwAR0LgEoikMrgSLQ01SB5mMkGne35M1UXQjGj8DEMaqJzXaDj1NxyYUYGieg>
 [colab]: <https://colab.research.google.com/assets/colab-badge.svg>
 [colab-link]: <https://colab.research.google.com/drive/1hGIltfD_MY8UUkMeINel3JeoHMyQLivs?usp=sharing>
 [huggingface]: <https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue>
