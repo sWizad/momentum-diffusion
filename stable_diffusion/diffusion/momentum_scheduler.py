@@ -212,9 +212,11 @@ class MomentumUniPCMultistepScheduler(UniPCMultistepScheduler):
     When beta = 1.0, this method is equivalent to UniPC without momentum.
     """
     def initialize_momentum(self, beta):
+        assert ("c" in beta) and ("p" in beta)
         self.vel_p = None
         self.vel_c = None
-        self.beta = beta
+        self.beta_p = beta["p"]
+        self.beta_c = beta["c"]
 
     def clear_temp(self):
         self.ets = []
@@ -305,7 +307,7 @@ class MomentumUniPCMultistepScheduler(UniPCMultistepScheduler):
             if self.vel_p is None:
                 self.vel_p = val
             else:
-                self.vel_p = (1-self.beta)*self.vel_p + self.beta * val
+                self.vel_p = (1-self.beta_p)*self.vel_p + self.beta_p * val
             self.vel_p = val
 
             x_t = sigma_t  * (x/ sigma_s0 - alpha_t * self.vel_p * h_phi_1)
@@ -400,7 +402,7 @@ class MomentumUniPCMultistepScheduler(UniPCMultistepScheduler):
             if self.vel_c is None:
                 self.vel_c = val
             else:
-                self.vel_c = (1-self.beta)*self.vel_c + self.beta * val
+                self.vel_c = (1-self.beta_c)*self.vel_c + self.beta_c * val
 
             x_t = sigma_t  * (x/ sigma_s0 - alpha_t * self.vel_c * h_phi_1)
         else:
